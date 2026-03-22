@@ -305,6 +305,38 @@
                 document.body.removeChild(textArea);
             }
         }
+
+        // ページ読み込み時のセッション確認とURLハッシュのクリーンアップ
+        async function checkSession() {
+            const { data, error } = await supabaseClient.auth.getSession();
+            
+            if (data && data.session) {
+                currentUser = data.session.user;
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+            }
+
+            // 認証後のURLに付与されるハッシュ（#以降の access_token 等）を削除する
+            if (window.location.hash) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // 認証状態の変更を監視（ログインの維持などに必要）
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (session) {
+                currentUser = session.user;
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+            } else {
+                currentUser = null;
+                document.getElementById('auth-section').style.display = 'block';
+                document.getElementById('dashboard-section').style.display = 'none';
+            }
+        });
+
+        // 初期化実行
+        checkSession();
     </script>
 </body>
 
