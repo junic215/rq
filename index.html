@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>忘れ物通知サービス - 登録・ログイン</title>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --primary: #2196F3;
+            --primary-hover: #1e88e5;
+            --success: #4CAF50;
+            --success-hover: #45a049;
+            --warning: #ff9800;
+            --warning-hover: #fb8c00;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-sub: #666666;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-align: center;
+            color: var(--text-main);
+            margin-top: 0;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-sub);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 0.8rem;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .btn-register {
+            background-color: var(--success);
+        }
+
+        .btn-register:hover {
+            background-color: var(--success-hover);
+        }
+
+        .btn-login {
+            background-color: var(--primary);
+            margin-bottom: 0;
+        }
+
+        .btn-login:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-generate {
+            background-color: var(--warning);
+            display: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-generate:hover {
+            background-color: var(--warning-hover);
+        }
+
+        .btn-copy {
+            background-color: var(--text-sub);
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .btn-copy:hover {
+            background-color: #555;
+        }
+
+        .url-box {
+            padding: 1rem;
+            background-color: #e3f2fd;
+            border: 2px dashed var(--primary);
+            border-radius: 6px;
+            word-break: break-all;
+            display: none;
+            text-align: center;
+            color: var(--text-main);
+            position: relative;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+            position: relative;
+        }
+
+        #dashboard-section {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>忘れ物通知サービス</h1>
+
+        <!-- 登録・ログインフォーム -->
+        <div id="auth-section">
+            <div class="form-group">
+                <label for="email">メールアドレス</label>
+                <input type="email" id="email" placeholder="example@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="password">パスワード</label>
+                <input type="password" id="password" placeholder="6文字以上" required>
+            </div>
+            <button class="btn-register" id="btn-register" onclick="handleRegister()">登録する</button>
+            <button class="btn-login" id="btn-login" onclick="handleLogin()">ログイン</button>
+        </div>
+
+        <!-- ログイン後ダッシュボード -->
+        <div id="dashboard-section" style="display: none;">
+            <p style="color: var(--text-sub); margin-bottom: 1.5rem;">ログインに成功しました。</p>
+            <button class="btn-generate" id="btn-generate" onclick="generateURL()"
+                style="display: block;">QRコード用URLを生成</button>
+
+            <div class="url-box" id="url-box"></div>
+            <button class="btn-copy" id="btn-copy" onclick="copyURL()">URLをコピーする</button>
+        </div>
+    </div>
+
+    <script>
+        // ■ Supabase設定 (ご自身のプロジェクト情報に変更してください)
+        const SUPABASE_URL = 'https://inzjfyxgjbrxvtpzpqgc.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluempmeXhnamJyeHZ0cHpwcWdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODkzMTAsImV4cCI6MjA4OTc2NTMxMH0.MHvz-nxpfdSkvJd8zexyHSvT_o8Us7F9DRr13_5awLo';
+
+        // Supabaseクライアントの初期化
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+
+        // ボタンのローディング状態を切り替える関数
+        function setLoading(buttonId, isLoading) {
+            const btn = document.getElementById(buttonId);
+            if (isLoading) {
+                btn.classList.add('loading');
+                btn.dataset.originalText = btn.innerText;
+                btn.innerText = '処理中...';
+            } else {
+                btn.classList.remove('loading');
+                btn.innerText = btn.dataset.originalText;
+            }
+        }
+
+        // サインアップ処理
+        async function handleRegister() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                alert('メールアドレスとパスワードを入力してください。');
+                return;
+            }
+
+            setLoading('btn-register', true);
+            const { data, error } = await supabaseClient.auth.signUp({
+                email: email,
+                password: password,
+            });
+            setLoading('btn-register', false);
+
+            if (error) {
+                alert('登録エラー: ' + error.message);
+            } else {
+                alert('登録が完了しました。確認メールをチェックするか、そのままログインをお試しください。');
+            }
+        }
+
+        // ログイン処理
+        async function handleLogin() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                alert('メールアドレスとパスワードを入力してください。');
+                return;
+            }
+
+            setLoading('btn-login', true);
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password,
+            });
+            setLoading('btn-login', false);
+
+            if (error) {
+                alert('ログインエラー: ' + error.message);
+            } else {
+                currentUser = data.user;
+                // UIの切り替え
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+            }
+        }
+
+        // URL生成処理
+        function generateURL() {
+            if (!currentUser) {
+                alert('ログインしていません。');
+                return;
+            }
+
+            const uid = currentUser.id;
+            // ローカル環境用（本番環境では実際のドメインに変更してください）
+            const url = `http://localhost:8000/notify.html?uid=${uid}`;
+
+            const urlBox = document.getElementById('url-box');
+            urlBox.innerText = url;
+            urlBox.style.display = 'block';
+
+            document.getElementById('btn-copy').style.display = 'block';
+        }
+
+        // URLコピー処理
+        function copyURL() {
+            const urlBox = document.getElementById('url-box');
+            const url = urlBox.innerText;
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url).then(() => {
+                    alert('URLをコピーしました！');
+                }).catch(err => {
+                    alert('コピーに失敗しました: ' + err);
+                });
+            } else {
+                // Clipboard APIが使えない場合のフォールバック
+                const textArea = document.createElement("textarea");
+                textArea.value = url;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert('URLをコピーしました！');
+                } catch (err) {
+                    alert('コピーに失敗しました。');
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+    </script>
+</body>
+
+</html>

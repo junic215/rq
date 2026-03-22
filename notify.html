@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>忘れ物を見つけました</title>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- EmailJS CDN -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #f44336;
+            --primary-hover: #e53935;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --border-color: #dddddd;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-align: center;
+            color: var(--text-main);
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-sub);
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-sub);
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            resize: vertical;
+            min-height: 120px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background-color: #fff9c4;
+            border-left: 4px solid #fbc02d;
+            border-radius: 4px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            font-weight: normal;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background-color: var(--primary);
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .error-message {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>忘れ物を見つけました</h1>
+        <p class="subtitle">持ち主にメッセージとお知らせを送信できます。</p>
+
+        <div id="error-box" class="error-message"></div>
+
+        <div id="form-section">
+            <div class="form-group">
+                <label for="message">メッセージ</label>
+                <textarea id="message" placeholder="例: ○○駅の改札窓口に預けました。〇〇の特徴があるカバンです。" required></textarea>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="send-location" checked>
+                <label for="send-location">現在地の位置情報を含めて送信する</label>
+            </div>
+
+            <button id="btn-submit" onclick="handleSubmit()">持ち主に送信する</button>
+        </div>
+    </div>
+
+    <script>
+        /*
+         * 【 セキュリティに関する注意 】
+         * 本来、フロントエンド（ブラウザ側）から他人のメールアドレスをDBから取得し、
+         * そのままEmailJS等に渡して送信する設計は推奨されません。
+         * 理由: 悪意のあるユーザーがAPIを叩き、他人のメールアドレスを抜き取ったり、
+         * 単純なスパム送信に悪用できるリスクがあるためです。
+         * 
+         * 本番運用においては、「uidとメッセージ内容」のみをサーバーサイド
+         * （Supabaseのエッジファンクション等）に送信し、そこでメールアドレスを付け合わせて
+         * メールの送信処理まで完結させる「API経由」の構成にすることを強く推奨します。
+         */
+
+        // ■ Supabase設定 (ご自身のプロジェクト情報に変更してください)
+        const SUPABASE_URL = 'https://inzjfyxgjbrxvtpzpqgc.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluempmeXhnamJyeHZ0cHpwcWdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODkzMTAsImV4cCI6MjA4OTc2NTMxMH0.MHvz-nxpfdSkvJd8zexyHSvT_o8Us7F9DRr13_5awLo';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ■ EmailJS設定 (ご自身のプロジェクト情報に変更してください)
+        const EMAILJS_PUBLIC_KEY = 'Yn4lx7V4Cj1mekEt5';
+        const EMAILJS_SERVICE_ID = 'service_f5yp4ps';
+        const EMAILJS_TEMPLATE_ID = 'template_ybdsqra';
+
+        // EmailJSの初期化
+        emailjs.init({
+            publicKey: EMAILJS_PUBLIC_KEY,
+        });
+
+        // URLパラメータから uid を取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const uid = urlParams.get('uid');
+
+        const errorBox = document.getElementById('error-box');
+        const submitBtn = document.getElementById('btn-submit');
+
+        if (!uid) {
+            showError('URLが不正です。ユーザーIDが見つかりません。');
+            submitBtn.disabled = true;
+        }
+
+        // 汎用エラー表示関数
+        function showError(msg) {
+            errorBox.innerText = msg;
+            errorBox.style.display = 'block';
+        }
+
+        // ボタンのローディング状態を切り替える関数
+        function setLoading(isLoading) {
+            if (isLoading) {
+                submitBtn.classList.add('loading');
+                submitBtn.dataset.originalText = submitBtn.innerText;
+                submitBtn.innerText = '送信中...';
+            } else {
+                submitBtn.classList.remove('loading');
+                submitBtn.innerText = submitBtn.dataset.originalText || '持ち主に送信する';
+            }
+        }
+
+        // Supabaseのusersテーブルからメールアドレスを取得する関数
+        // 前提: テーブル「users」があり、カラム「user_id」(uuid)、カラム「email」(text) が存在すること
+        async function getTargetEmail(userId) {
+            const { data, error } = await supabaseClient
+                .from('users')
+                .select('email')
+                .eq('user_id', userId)
+                .single();
+
+            if (error || !data) {
+                console.error('Email fetch error:', error);
+                throw new Error('持ち主の情報の取得に失敗しました。');
+            }
+            return data.email;
+        }
+
+        // ブラウザから位置情報を取得する関数
+        function getLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error('お使いのブラウザは位置情報に対応していません。'));
+                } else {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve(position.coords),
+                        (error) => reject(error),
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    );
+                }
+            });
+        }
+
+        // 送信ボタン押下時の処理
+        async function handleSubmit() {
+            if (!uid) return;
+            errorBox.style.display = 'none'; // エラー表示をリセット
+
+            const message = document.getElementById('message').value;
+            if (!message.trim()) {
+                alert('メッセージを入力してください。');
+                return;
+            }
+
+            const sendLocation = document.getElementById('send-location').checked;
+
+            setLoading(true);
+
+            try {
+                // 1. Supabaseから持ち主のメールアドレスを取得
+                const targetEmail = await getTargetEmail(uid);
+
+                // 2. 位置情報の取得（チェックボックスがONの場合のみ）
+                let locationText = '※ 位置情報は送信されませんでした';
+                if (sendLocation) {
+                    try {
+                        const coords = await getLocation();
+                        // Google Mapsのリンクを生成
+                        locationText = `https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`;
+                    } catch (locErr) {
+                        alert('位置情報の取得に失敗したため、位置情報なしで送信します。\n(' + locErr.message + ')');
+                        locationText = '※ 位置情報の取得に失敗しました';
+                    }
+                }
+
+                // 3. EmailJSでメール送信
+                // ※ EmailJSのテンプレート内で {{to_email}}, {{message}}, {{location}} という変数が設定されている前提です
+                const templateParams = {
+                    to_email: targetEmail,
+                    message: message,
+                    location: locationText
+                };
+
+                await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+
+                alert('持ち主にメッセージを送信しました！ご協力ありがとうございます。');
+
+                // 送信成功後はフォームをクリア
+                document.getElementById('message').value = '';
+
+            } catch (error) {
+                showError('エラーが発生しました: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    </script>
+</body>
+
+</html>
