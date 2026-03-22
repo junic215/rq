@@ -308,18 +308,21 @@
 
         // ページ読み込み時のセッション確認とURLハッシュのクリーンアップ
         async function checkSession() {
+            // ① まずセッション取得（これでURLのトークンが処理される）
             const { data, error } = await supabaseClient.auth.getSession();
-            
+
             if (data && data.session) {
                 currentUser = data.session.user;
                 document.getElementById('auth-section').style.display = 'none';
                 document.getElementById('dashboard-section').style.display = 'block';
             }
 
-            // 認証後のURLに付与されるハッシュ（#以降の access_token 等）を削除する
-            if (window.location.hash) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
+            // ② 少し待ってからURLをきれいにする（これがポイント）
+            setTimeout(() => {
+                if (window.location.hash) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }, 100);
         }
 
         // 認証状態の変更を監視（ログインの維持などに必要）
@@ -328,6 +331,11 @@
                 currentUser = session.user;
                 document.getElementById('auth-section').style.display = 'none';
                 document.getElementById('dashboard-section').style.display = 'block';
+
+                // ← これ追加
+                if (window.location.hash) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             } else {
                 currentUser = null;
                 document.getElementById('auth-section').style.display = 'block';
