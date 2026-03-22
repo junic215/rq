@@ -245,11 +245,13 @@
             }
 
             setLoading('btn-login', true);
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
+            const { data, error } = await supabaseClient.auth.signUp({
                 email: email,
                 password: password,
-            });
-            setLoading('btn-login', false);
+                options: {
+                    emailRedirectTo: "https://junic215.github.io/rq/index.html"
+                }
+            }); setLoading('btn-login', false);
 
             if (error) {
                 alert('ログインエラー: ' + error.message);
